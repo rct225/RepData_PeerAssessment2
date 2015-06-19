@@ -1,0 +1,73 @@
+Reproducible Research: Peer Assessment 2
+==========================================
+Created by Robert Tuck June 18, 2015
+
+## Impact of Severe Weather Events on Public Health and Economy in the United States
+
+### Synonpsis  
+Storms and other severe weather events can cause both public health and economic problems for communities and municipalities. Many severe events can result in fatalities, injuries, and property damage, and preventing such outcomes to the extent possible is a key concern.
+
+This project involves exploring the U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database. This database tracks characteristics of major storms and weather events in the United States, including when and where they occur, as well as estimates of any fatalities, injuries, and property damage.
+
+From the analysis of the data, it appears that <xxxx> events are the most harmful with respect to population health and <xxxx> events have the greatest economic impact
+
+
+### Basic settings
+echo = TRUE  # Always make code visible
+library(R.utils)
+library(ggplot2)
+require(plyr)
+
+### Data Processing
+```{r}
+# download file from URL
+if (!file.exists("storm.csv.bz2")) {
+    download.file("https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2", 
+        "storm.csv.bz2", method = "curl")
+}
+# unzip file
+if (!file.exists("storm.csv")) {
+    bunzip2("storm.csv.bz2", "storm.csv", remove = FALSE)
+}
+# load data into R
+storm <- read.csv("storm.csv")
+head(storm)
+```
+
+```{r}
+### subset the data into the columns of interest
+datacols <- c("EVTYPE", "FATALITIES", "INJURIES", "PROPDMG", "PROPDMGEXP", "CROPDMG", 
+    "CROPDMGEXP")
+storm_data <- storm[datacols]
+```
+```{r}
+# unique(storm_data$PROPDMGEXP)
+
+from <- c("H","h","K","k","M","m","B","b","+","-","?","0","1","2","3","4","5","6","7","8","")
+to <- c(100, 100, 1000, 1000, 1000000, 1000000, 1000000000, 100000000, 1, 0, 0, 1, 10, 100, 1000, 10000, 100000, 100000, 10000000, 100000000, 0)
+
+library(car)
+recoderFunc <- function(data, oldvalue, newvalue) {
+  # convert any factors to characters
+  if (is.factor(data))     data     <- as.character(data)
+  if (is.factor(oldvalue)) oldvalue <- as.character(oldvalue)
+  if (is.factor(newvalue)) newvalue <- as.character(newvalue)
+  
+  # create the return vector
+  newvec <- data
+  
+  # put recoded values into the correct position in the return vector
+  for (i in unique(oldvalue)) newvec[data == i] <- newvalue[oldvalue == i]
+  
+  newvec
+  }
+
+storm_data$PROPEXP <- as.numeric(recoderFunc(storm_data$PROPDMGEXP, from, to))
+
+```
+### Results
+
+#### Aross the United States, Which types of events are nost harmful with respect to population health?
+
+#### Across the United States, which types of events have the greatest economic consequences?
+
