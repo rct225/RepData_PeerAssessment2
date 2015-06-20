@@ -9,14 +9,17 @@ Storms and other severe weather events can cause both public health and economic
 
 This project involves exploring the U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database. This database tracks characteristics of major storms and weather events in the United States, including when and where they occur, as well as estimates of any fatalities, injuries, and property damage.
 
-From the analysis of the data, it appears that <xxxx> events are the most harmful with respect to population health and <xxxx> events have the greatest economic impact
+From the analysis of the data, it appears that Tornado events are the most harmful with respect to population health and Flood events have the greatest economic impact.
 
 
 ### Basic settings
-echo = TRUE  # Always make code visible
+```{r}
 library(R.utils)
 library(ggplot2)
 require(plyr)
+library(car)
+library(dplyr)
+```
 
 ### Data Processing
 ```{r}
@@ -33,20 +36,21 @@ if (!file.exists("storm.csv")) {
 storm <- read.csv("storm.csv")
 head(storm)
 ```
-
+Get a subset of the data with columns we are interested in.
 ```{r}
 ### subset the data into the columns of interest
-datacols <- c("EVTYPE", "FATALITIES", "INJURIES", "PROPDMG", "PROPDMGEXP", "CROPDMG", 
-    "CROPDMGEXP")
+datacols <- c("EVTYPE", "FATALITIES", "INJURIES", "PROPDMG", "PROPDMGEXP", "CROPDMG", "CROPDMGEXP")
 storm_data <- storm[datacols]
 ```
+
+Convert the PROPDMGEXP codes into numeric values.  See https://rpubs.com/flyingdisc/PROPDMGEXP for an analysis about converting these values.  Then do a smilar conversion for CROPDMGEXP.
+
+
 ```{r}
 # unique(storm_data$PROPDMGEXP)
+# Function to recode a data column from one set a values to another
+# See https://susanejohnston.wordpress.com/2012/10/01/find-and-replace-in-r-part-2-how-to-recode-many-values-simultaneously/ for additional info
 
-from <- c("H","h","K","k","M","m","B","b","+","-","?","0","1","2","3","4","5","6","7","8","")
-to <- c(100, 100, 1000, 1000, 1000000, 1000000, 1000000000, 100000000, 1, 0, 0, 1, 10, 100, 1000, 10000, 100000, 100000, 10000000, 100000000, 0)
-
-library(car)
 recoderFunc <- function(data, oldvalue, newvalue) {
   # convert any factors to characters
   if (is.factor(data))     data     <- as.character(data)
@@ -62,12 +66,76 @@ recoderFunc <- function(data, oldvalue, newvalue) {
   newvec
   }
 
-storm_data$PROPEXP <- as.numeric(recoderFunc(storm_data$PROPDMGEXP, from, to))
+prop_exp_from <- c("H","h","K","k","M","m","B","b","+","-","?","0","1","2","3","4","5","6","7","8","")
+prop_exp_to <- c(100, 100, 1000, 1000, 1000000, 1000000, 1000000000, 100000000, 1, 0, 0, 1, 10, 100, 1000, 10000, 100000, 100000, 10000000, 100000000, 0)
 
+storm_data$PROPEXP <- as.numeric(recoderFunc(storm_data$PROPDMGEXP, prop_exp_from, prop_exp_to))
+
+crop_exp_from <- c("?", "K", "k", "m", "M", "B", "0", "2", "")
+crop_exp_to <- c(0, 1000, 1000, 1000000, 1000000, 1000000000, 1, 100, 0)
+storm_data$CROPEXP <- as.numeric(recoderFunc(storm_data$CROPDMGEXP, crop_exp_from, crop_exp_to))
 ```
+
+Combine the values from PROPDMG and PROPEXP into PROPDMGVALUE by multiplying the PROPDMG by the PROPEXP to get the actual value of the proerty damage.
+```{r}
+storm_data$PROPDMGVALUE <- storm_data$PROPDMG * storm_data$PROPEXP
+```
+Combine the values from CROPDMG and CROPEXP into CROPDMGVALUE by multiplying the CROPDMG by the CROPEXP to get the actual value of the crop damage.
+```{r}
+storm_data$CROPDMGVALUE <- storm_data$CROPDMG * storm_data$CROPEXP
+```
+Add the values of the property damage (PROPDMGVALUE) and crop damage (CROPDMGVALUE) and store in a new column, TOTALDMGVALUE.
+```{r}
+storm_data$TOTALDMGVALUE <- storm_data$PROPDMGVALUE + storm_data$CROPDMGVALUE
+```
+
+Get total values of fatalities, injuries and econmic costs by aggregating values based on the type of event (EVTYPE)
+```{r}
+fatalities <- aggregate(FATALITIES ~ EVTYPE, data=storm_data, sum)
+injuries <- aggregate(INJURIES ~ EVTYPE, data=storm_data, sum)
+propdmg <- aggregate(PROPDMGVALUE ~ EVTYPE, data=storm_data, sum)
+cropdmg <- aggregate(CROPDMGVALUE ~ EVTYPE, data=storm_data, sum)
+totaldmg <- aggregate(TOTALDMGVALUE ~ EVTYPE, data=storm_data, sum)
+# create a new column in the totaldmg to get costs in billions of dollars
+totaldmg$VALUE_BILLION <- totaldmg$TOTALDMGVALUE / 1000000000
+```
+
 ### Results
 
-#### Aross the United States, Which types of events are nost harmful with respect to population health?
+#### Across the United States, Which types of events are nost harmful with respect to population health?
+
+```{r}
+top10_fatalities <- head(fatalities[order(-fatalities$FATALITIES),],10)
+top10_fatalities
+
+top10_injuries <- head(injuries[order(-injuries$INJURIES),], 10)
+top10_injuries
+
+ggplot(data=top10_fatalities, aes(x=reorder(EVTYPE,-FATALITIES), y=FATALITIES)) +
+     geom_bar(stat="identity") + 
+     xlab("Event Type") + 
+     ylab("Number of Fatalities") + 
+     ggtitle("Top 10 Weather Events with Highest Fatalities 1950 - 2011") +
+     theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplot(data=top10_injuries, aes(x=reorder(EVTYPE,-INJURIES), y=INJURIES)) +
+     geom_bar(stat="identity") + 
+     xlab("Event Type") + 
+     ylab("Number of Injuries") + 
+     ggtitle("Top 10 Weather Events with Highest Injuries 1950 - 2011") +
+     theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
 
 #### Across the United States, which types of events have the greatest economic consequences?
 
+```{r}
+top10_totaldmg <- head(totaldmg[order(-totaldmg$TOTALDMGVALUE),],10)
+top10_totaldmg
+
+ggplot(data=top10_totaldmg, aes(x=reorder(EVTYPE,-VALUE_BILLION), y=VALUE_BILLION)) +
+     geom_bar(stat="identity") + 
+     xlab("Event Type") + 
+     ylab("Cost (Billions of US Dollars)") + 
+     ggtitle("Top 10 Weather Events with Highest Economic Cost 1950 - 2011") +
+     theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
